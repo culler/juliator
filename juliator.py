@@ -36,7 +36,7 @@ class Viewer:
         self.canvas.bind("<Button-3>", self.zoom_out)
         self.window.bind("<Key>", self.keypress)
         self.canvas.pack()
-        #subclasses should call self.set
+        self.image_name = None
         
     def keypress(self, event):
         if event.char == '-' or event.char == '_':
@@ -44,11 +44,24 @@ class Viewer:
         if event.char == '+' or event.char == '=':
             self.zoom_in(event)
 
-    # Subclasses should override this.
+    # Subclasses should override this, and call from __init__.
     def set(self, width=None, center=None):
         if width != None: self.width = width
         if center != None: self.center = center
 
+    # Subclasses should have an iterator attribute
+    def display_image(self):
+        self.imagestring = self.iterator.get_image()
+        self.image = Image.fromstring('P', (self.W, self.H),
+                                      self.imagestring)
+        self.image.putpalette(self.palette)
+        self.bitmap = ImageTk.PhotoImage(self.image)
+        image_name = self.canvas.create_image(0,0,
+                                           anchor=Tkinter.NW,
+                                           image=self.bitmap)
+        self.canvas.delete(self.image_name)
+        self.image_name = image_name
+        
     def motion(self, event):
         if self.dragging == 1:
             if self.box:
@@ -100,13 +113,12 @@ class Mandelbrot(Viewer):
     def __init__(self, W=500, H=500, width=2.75, center=-0.75+0.0j,
                  palette=vibgyor()):
         Viewer.__init__(self, W, H, width, center, palette)
-        self.julia = None
+        self.julia = Julia(c=center)
         self.marker = ''
         self.canvas.bind("<Button-2>", self.show_julia)
         if sys.platform == 'darwin':
             self.canvas.bind("<Control-Button-1>", self.show_julia)
             self.canvas.bind("<Control-ButtonRelease-1>", lambda event:None)
-        self.bands = list(range(4))
         self.iterator = C_Iterator(self.W, self.H, 255)
         self.set(width, center)
         
@@ -120,23 +132,9 @@ class Mandelbrot(Viewer):
         c0 = self.center - (self.width + height)/2
         c1 = self.center + (self.width + height)/2
         self.iterator.set(c0, c1, 0+0j)
-        self.imagestring = self.iterator.get_image()
-        self.image = Image.fromstring('P', (self.W, self.H),
-                                      self.imagestring)
-        self.image.putpalette(self.palette)
-        self.bitmap = ImageTk.PhotoImage(self.image)
-        self.canvas.create_image(0,0, anchor=Tkinter.NW, image=self.bitmap)
+        self.display_image()
         print time.time() - start
         self.show_julia()
-
-    def compute_band(self, band, num_bands, c0, c1):
-        H = self.H/num_bands
-        delta = (c1.imag - c0.imag)/num_bands
-        C0 = c0 + band*delta*1j
-        C1 = c1.real + (C0.imag + delta)*1j
-        #print 'starting band %d of %d: %s .. %s'%(band, num_bands, C0, C1)
-        self.queue.put( (band, iterate(self.W,H,255,0+0j,0+0j,C0,C1)) )
-        #print 'band %d done'%band
 
     def show_julia(self, event=None, center = 0+0j):
         if event:
@@ -149,11 +147,8 @@ class Mandelbrot(Viewer):
         self.canvas.delete(self.marker)
         self.marker = self.canvas.create_oval(x-4, y-4, x+4, y+4,
                                               outline='white', width=2)
-        if self.julia == None:
-            self.julia = Julia(c=center)
-        else:
-            self.julia.filled = True
-            self.julia.set(width=4.0, center=0.0+0.0j, c=center)
+        self.julia.filled = True
+        self.julia.set(width=4.0, center=0.0+0.0j, c=center)
         
 class Julia(Viewer):
 
@@ -164,6 +159,7 @@ class Julia(Viewer):
         if sys.platform == 'darwin':
             self.canvas.bind("<Control-Button-1>", self.toggle_fill)
             self.canvas.bind("<Control-ButtonRelease-1>", lambda event:None)
+        self.iterator = Z_Iterator(self.W, self.H, 255)
         self.set(width, center, c)
         
     def set(self, width=None, center=None, c=None):
@@ -176,12 +172,8 @@ class Julia(Viewer):
         height = 1j*self.width*float(self.H)/float(self.W)
         z0 = self.center - (self.width + height)/2
         z1 = self.center + (self.width + height)/2
-        self.imagestring = iterate(self.W,self.H,255,z0,z1,self.c,self.c)
-        self.image = Image.fromstring('P', (self.W, self.H),
-                                      self.imagestring)
-        self.image.putpalette(self.palette)
-        self.bitmap = ImageTk.PhotoImage(self.image)
-        self.canvas.create_image(0,0, anchor=Tkinter.NW, image=self.bitmap)
+        self.iterator.set(z0, z1, self.c)
+        self.display_image()
 
     def set_title(self):
         self.window.title(
