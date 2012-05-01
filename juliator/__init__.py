@@ -2,7 +2,7 @@ import Tkinter as Tk_
 import ttk
 import Image
 import ImageTk
-import os, sys, math, cmath, colorsys
+import os, sys, math, cmath, colorsys, time
 from iterator import iterate, boundary, boxcount, C_Iterator, Z_Iterator
 from multiprocessing import Process, Queue, cpu_count
 
@@ -10,6 +10,11 @@ if sys.platform == 'darwin':
     WindowBG = 'SystemDialogBackgroundActive'
     GroupBG = '#e0e0e0'
     BrowserBG = '#a8a8a8'
+elif sys.platform == 'linux2':
+    WindowBG = '#e0e0e0'
+    GroupBG = '#e0e0e0'
+    BrowserBG = '#a8a8a8'
+    
 
 def vibgyor(size=256):
     result = []
@@ -57,9 +62,11 @@ class Viewer(ttk.LabelFrame):
         if width != None: self.width = width
         if center != None: self.center = center
 
-    # Subclasses should have an iterator attribute
+    # Subclasses should provide an iterator attribute
     def display_image(self):
+        start = time.time()
         self.imagestring = self.iterator.get_image()
+        print time.time() - start
         self.image = Image.fromstring('P', (self.W, self.H),
                                       self.imagestring)
         self.image.putpalette(self.palette)
@@ -107,16 +114,6 @@ class Viewer(ttk.LabelFrame):
     def zoom_in(self, event):
         self.set(width=self.width/2)
 
-    def set_dot(self, z):
-        self.clear_dot()
-        x = int((0.5 + (z.real - self.center.real)/self.width)*self.W)
-        y = int((0.5 + (self.center.imag - z.imag)/(self.width*self.aspect))*self.H)
-        self.dot = self.canvas.create_oval(x-2, y-2, x+2, y+2, fill='white')
-
-    def clear_dot(self):
-        if self.dot:
-            self.canvas.delete(self.dot)
-
 class Mandelbrot(Viewer):
     """
     Viewer for the Mandelbrot set.
@@ -137,8 +134,6 @@ class Mandelbrot(Viewer):
     def set(self, width=None, center=None):
         if width != None: self.width = width
         if center != None: self.center = center
-#        self.window.title('Mandelbrot set -- center = %f + %fi, width = %f'%
-#                          (self.center.real, self.center.imag, self.width))
         height = 1j*self.width*self.aspect
         c0 = self.center - (self.width + height)/2
         c1 = self.center + (self.width + height)/2
@@ -187,14 +182,6 @@ class Julia(Viewer):
         z1 = self.center + (self.width + height)/2
         self.iterator.set(z0, z1, self.c)
         self.display_image()
-
-    def set_title(self):
-        pass
-#        self.window.title(
-#            '%s Julia set: c=%.3f+%.3fi, center=%.3f+%.3fi, width=%e'%
-#            ('Filled' if self.filled else '',
-#             self.c.real, self.c.imag, self.center.real,
-#             self.center.imag, self.width))
 
     def toggle_fill(self, event):
         if self.filled:
@@ -246,7 +233,6 @@ class Juliator:
             self.window = Tk_.Toplevel(Tk_._default_root)
         else:
             self.window = Tk_.Tk()
-#        self.window.config(bg=WindowBG)
         self.window.title('Juliator')
         self.top = Tk_.Frame(self.window, bg=WindowBG)
         self.mandelbrot = Mandelbrot(self.top)
