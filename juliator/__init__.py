@@ -176,7 +176,6 @@ class Julia(Viewer):
         if c != None:
             self.c = c
         self.filled = True
-        self.set_title()
         height = 1j*self.width*float(self.H)/float(self.W)
         z0 = self.center - (self.width + height)/2
         z1 = self.center + (self.width + height)/2
@@ -205,7 +204,6 @@ class Julia(Viewer):
                 text= 'Box dimension is approximately %.3f'%(
                 self.box_dimension(bdry) )
                 )
-        self.set_title()
 
     def box_dimension(self, boundary):
         count = boxcount(boundary, self.W, self.H, 255)
