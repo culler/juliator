@@ -1,9 +1,15 @@
-import Tkinter
+import Tkinter as Tk_
+import ttk
 import Image
 import ImageTk
 import os, sys, math, cmath, colorsys
 from iterator import iterate, boundary, boxcount, C_Iterator, Z_Iterator
 from multiprocessing import Process, Queue, cpu_count
+
+if sys.platform == 'darwin':
+    WindowBG = 'SystemDialogBackgroundActive'
+    GroupBG = '#e0e0e0'
+    BrowserBG = '#a8a8a8'
 
 def vibgyor(size=256):
     result = []
@@ -14,13 +20,13 @@ def vibgyor(size=256):
     result += [0,0,0]
     return result
 
-class Viewer(Tkinter.Frame):
+class Viewer(ttk.LabelFrame):
     """
     Base class for panes that display colormap images.
     """
     def __init__(self, parent, W=500, H=500, width=4.0, center=0.0+0.0j,
-                 palette=vibgyor()):
-        Tkinter.Frame.__init__(self, parent)
+                 palette=vibgyor(), text='Viewer'):
+        ttk.LabelFrame.__init__(self, parent, text=text)
         self.parent = parent
         self.W, self.H, self.aspect = W, H, float(H)/float(W)
         self.image = None
@@ -28,7 +34,8 @@ class Viewer(Tkinter.Frame):
         self.box = None
         self.dot = None
         self.palette = palette
-        self.canvas = Tkinter.Canvas(self, width=W, height=H)
+        self.canvas = Tk_.Canvas(self, width=W, height=H, bd=0, bg=GroupBG,
+                                 highlightbackground=GroupBG)
         self.canvas.bind('<Motion>', self.motion)
         self.canvas.bind('<Leave>', self.leave)
         self.canvas.bind('<Button-1>', self.mouse_down)
@@ -36,6 +43,7 @@ class Viewer(Tkinter.Frame):
         self.canvas.bind('<Button-3>', self.zoom_out)
         self.canvas.bind('<Key>', self.keypress)
         self.canvas.pack()
+        self.mouse_location = Tk_.StringVar(self)
         self.image_name = None
         
     def keypress(self, event):
@@ -56,8 +64,8 @@ class Viewer(Tkinter.Frame):
                                       self.imagestring)
         self.image.putpalette(self.palette)
         self.bitmap = ImageTk.PhotoImage(self.image)
-        image_name = self.canvas.create_image(0,0,
-                                           anchor=Tkinter.NW,
+        image_name = self.canvas.create_image(1,1,
+                                           anchor=Tk_.NW,
                                            image=self.bitmap)
         self.canvas.delete(self.image_name)
         self.image_name = image_name
@@ -115,7 +123,8 @@ class Mandelbrot(Viewer):
     """
     def __init__(self, parent, W=500, H=500, width=2.75,
                  center=-0.75+0.0j, palette=vibgyor()):
-        Viewer.__init__(self, parent, W, H, width, center, palette)
+        Viewer.__init__(self, parent, W, H, width, center, palette,
+                        text='Mandelbrot Set')
         self.julia = Julia(self.parent, c=center)
         self.marker = ''
         self.canvas.bind('<Button-2>', self.show_julia)
@@ -157,7 +166,8 @@ class Julia(Viewer):
     """
     def __init__(self, parent, W=500, H=500, width=4.0,
                  center=0.0+0.0j, c=0.0+0.0j, palette=vibgyor()):
-        Viewer.__init__(self, parent, W, H, width, center, palette)
+        Viewer.__init__(self, parent, W, H, width, center, palette,
+                 text='Julia Set')
         self.canvas.bind('<Button-2>', self.toggle_fill)
         if sys.platform == 'darwin':
             self.canvas.bind('<Control-Button-1>', self.toggle_fill)
@@ -198,13 +208,13 @@ class Julia(Viewer):
             self.image.putpalette(self.palette)
 
         self.bitmap = ImageTk.PhotoImage(self.image)
-        self.canvas.create_image(0,0, anchor=Tkinter.NW, image=self.bitmap)
+        self.canvas.create_image(0,0, anchor=Tk_.NW, image=self.bitmap)
         if not self.filled:
             self.canvas.create_rectangle(20, self.H-14, 300, self.H,
                                          fill='white', outline = '')
             self.canvas.create_text(
                 20, self.H-14, fill='red',
-                anchor=Tkinter.NW,  
+                anchor=Tk_.NW,  
                 text= 'Box dimension is approximately %.3f'%(
                 self.box_dimension(bdry) )
                 )
@@ -232,10 +242,18 @@ class Julia(Viewer):
 
 class Juliator:
     def __init__(self):
-        if Tkinter._default_root:
-            self.window = Tkinter.Toplevel(Tkinter._default_root)
+        if Tk_._default_root:
+            self.window = Tk_.Toplevel(Tk_._default_root)
         else:
-            self.window = Tkinter.Tk()
-        self.mandelbrot = Mandelbrot(self.window)
-        self.mandelbrot.grid(row=0, column=0)
-        self.mandelbrot.julia.grid(row=0, column=1)
+            self.window = Tk_.Tk()
+#        self.window.config(bg=WindowBG)
+        self.window.title('Juliator')
+        self.top = Tk_.Frame(self.window, bg=WindowBG)
+        self.mandelbrot = Mandelbrot(self.top)
+        self.mandelbrot.grid(row=0, column=0, padx=4, pady=4)
+        self.mandelbrot.julia.grid(row=0, column=1, padx=4, pady=4)
+        self.top.grid(row=0, column=0)
+        self.separator = ttk.Separator(self.window, orient=Tk_.HORIZONTAL)
+        self.separator.grid(row=1, column=0, sticky=Tk_.EW)
+        self.bottom = Tk_.Frame(self.window, bg='white', height=20)
+        self.bottom.grid(row=2, column=0, sticky=Tk_.NSEW)
