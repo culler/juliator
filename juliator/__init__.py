@@ -14,29 +14,27 @@ def vibgyor(size=256):
     result += [0,0,0]
     return result
 
-class Viewer:
+class Viewer(Tkinter.Frame):
     """
     Base class for panes that display colormap images.
     """
-    def __init__(self, W=500, H=500, width=4.0, center=0.0+0.0j,
+    def __init__(self, parent, W=500, H=500, width=4.0, center=0.0+0.0j,
                  palette=vibgyor()):
+        Tkinter.Frame.__init__(self, parent)
+        self.parent = parent
         self.W, self.H, self.aspect = W, H, float(H)/float(W)
         self.image = None
         self.dragging = 0
         self.box = None
         self.dot = None
         self.palette = palette
-        if Tkinter._default_root:
-            self.window = Tkinter.Toplevel(Tkinter._default_root)
-        else:
-            self.window = Tkinter.Tk()
-        self.canvas = Tkinter.Canvas(self.window, width=W, height=H)
-        self.canvas.bind("<Motion>", self.motion)
-        self.canvas.bind("<Leave>", self.leave)
-        self.canvas.bind("<Button-1>", self.mouse_down)
-        self.canvas.bind("<ButtonRelease-1>", self.mouse_up)
-        self.canvas.bind("<Button-3>", self.zoom_out)
-        self.window.bind("<Key>", self.keypress)
+        self.canvas = Tkinter.Canvas(self, width=W, height=H)
+        self.canvas.bind('<Motion>', self.motion)
+        self.canvas.bind('<Leave>', self.leave)
+        self.canvas.bind('<Button-1>', self.mouse_down)
+        self.canvas.bind('<ButtonRelease-1>', self.mouse_up)
+        self.canvas.bind('<Button-3>', self.zoom_out)
+        self.canvas.bind('<Key>', self.keypress)
         self.canvas.pack()
         self.image_name = None
         
@@ -73,13 +71,14 @@ class Viewer:
             x0, x1 = self.x - delta_x, self.x + delta_x
             y0, y1 = self.y - delta_y, self.y + delta_y
             self.box = self.canvas.create_line(x0,y0,x1,y0,x1,y1,x0,y1,x0,y0,
-                                               fill='gray')
+                                               fill='white')
 
     def leave(self,event):
         if self.box:
             self.canvas.delete(self.box)
 
     def mouse_down(self, event):
+        self.canvas.focus_set()
         self.x, self.y = event.x, event.y
         self.dragging = 1
         
@@ -114,23 +113,23 @@ class Mandelbrot(Viewer):
     """
     Viewer for the Mandelbrot set.
     """
-    def __init__(self, W=500, H=500, width=2.75, center=-0.75+0.0j,
-                 palette=vibgyor()):
-        Viewer.__init__(self, W, H, width, center, palette)
-        self.julia = Julia(c=center)
+    def __init__(self, parent, W=500, H=500, width=2.75,
+                 center=-0.75+0.0j, palette=vibgyor()):
+        Viewer.__init__(self, parent, W, H, width, center, palette)
+        self.julia = Julia(self.parent, c=center)
         self.marker = ''
-        self.canvas.bind("<Button-2>", self.show_julia)
+        self.canvas.bind('<Button-2>', self.show_julia)
         if sys.platform == 'darwin':
-            self.canvas.bind("<Control-Button-1>", self.show_julia)
-            self.canvas.bind("<Control-ButtonRelease-1>", lambda event:None)
+            self.canvas.bind('<Control-Button-1>', self.show_julia)
+            self.canvas.bind('<Control-ButtonRelease-1>', lambda event:None)
         self.iterator = C_Iterator(self.W, self.H, 255)
         self.set(width, center)
         
     def set(self, width=None, center=None):
         if width != None: self.width = width
         if center != None: self.center = center
-        self.window.title('Mandelbrot set -- center = %f + %fi, width = %f'%
-                          (self.center.real, self.center.imag, self.width))
+#        self.window.title('Mandelbrot set -- center = %f + %fi, width = %f'%
+#                          (self.center.real, self.center.imag, self.width))
         height = 1j*self.width*self.aspect
         c0 = self.center - (self.width + height)/2
         c1 = self.center + (self.width + height)/2
@@ -156,13 +155,13 @@ class Julia(Viewer):
     """
     Viewer for Julia sets.
     """
-    def __init__(self, W=500, H=500, width=4.0, center=0.0+0.0j, c=0.0+0.0j,
-                 palette=vibgyor()):
-        Viewer.__init__(self, W, H, width, center, palette)
-        self.canvas.bind("<Button-2>", self.toggle_fill)
+    def __init__(self, parent, W=500, H=500, width=4.0,
+                 center=0.0+0.0j, c=0.0+0.0j, palette=vibgyor()):
+        Viewer.__init__(self, parent, W, H, width, center, palette)
+        self.canvas.bind('<Button-2>', self.toggle_fill)
         if sys.platform == 'darwin':
-            self.canvas.bind("<Control-Button-1>", self.toggle_fill)
-            self.canvas.bind("<Control-ButtonRelease-1>", lambda event:None)
+            self.canvas.bind('<Control-Button-1>', self.toggle_fill)
+            self.canvas.bind('<Control-ButtonRelease-1>', lambda event:None)
         self.iterator = Z_Iterator(self.W, self.H, 255)
         self.set(width, center, c)
         
@@ -180,11 +179,12 @@ class Julia(Viewer):
         self.display_image()
 
     def set_title(self):
-        self.window.title(
-            '%s Julia set: c=%.3f+%.3fi, center=%.3f+%.3fi, width=%e'%
-            ('Filled' if self.filled else '',
-             self.c.real, self.c.imag, self.center.real,
-             self.center.imag, self.width))
+        pass
+#        self.window.title(
+#            '%s Julia set: c=%.3f+%.3fi, center=%.3f+%.3fi, width=%e'%
+#            ('Filled' if self.filled else '',
+#             self.c.real, self.c.imag, self.center.real,
+#             self.center.imag, self.width))
 
     def toggle_fill(self, event):
         if self.filled:
@@ -229,3 +229,13 @@ class Julia(Viewer):
             XY += x*y
             XX += x*x
         return (n*XY - X*Y)/(n*XX - X*X)
+
+class Juliator:
+    def __init__(self):
+        if Tkinter._default_root:
+            self.window = Tkinter.Toplevel(Tkinter._default_root)
+        else:
+            self.window = Tkinter.Tk()
+        self.mandelbrot = Mandelbrot(self.window)
+        self.mandelbrot.grid(row=0, column=0)
+        self.mandelbrot.julia.grid(row=0, column=1)
