@@ -1,7 +1,7 @@
 import Tkinter
 import Image
 import ImageTk
-import os, sys, math, cmath, time, colorsys
+import os, sys, math, cmath, colorsys
 from iterator import iterate, boundary, boxcount, C_Iterator, Z_Iterator
 from multiprocessing import Process, Queue, cpu_count
 
@@ -15,7 +15,9 @@ def vibgyor(size=256):
     return result
 
 class Viewer:
-
+    """
+    Base class for panes that display colormap images.
+    """
     def __init__(self, W=500, H=500, width=4.0, center=0.0+0.0j,
                  palette=vibgyor()):
         self.W, self.H, self.aspect = W, H, float(H)/float(W)
@@ -109,7 +111,9 @@ class Viewer:
             self.canvas.delete(self.dot)
 
 class Mandelbrot(Viewer):
-
+    """
+    Viewer for the Mandelbrot set.
+    """
     def __init__(self, W=500, H=500, width=2.75, center=-0.75+0.0j,
                  palette=vibgyor()):
         Viewer.__init__(self, W, H, width, center, palette)
@@ -123,7 +127,6 @@ class Mandelbrot(Viewer):
         self.set(width, center)
         
     def set(self, width=None, center=None):
-        start = time.time()
         if width != None: self.width = width
         if center != None: self.center = center
         self.window.title('Mandelbrot set -- center = %f + %fi, width = %f'%
@@ -133,7 +136,6 @@ class Mandelbrot(Viewer):
         c1 = self.center + (self.width + height)/2
         self.iterator.set(c0, c1, 0+0j)
         self.display_image()
-        print time.time() - start
         self.show_julia()
 
     def show_julia(self, event=None, center = 0+0j):
@@ -148,10 +150,12 @@ class Mandelbrot(Viewer):
         self.marker = self.canvas.create_oval(x-4, y-4, x+4, y+4,
                                               outline='white', width=2)
         self.julia.filled = True
-        self.julia.set(width=4.0, center=0.0+0.0j, c=center)
+        self.julia.set(c=center)
         
 class Julia(Viewer):
-
+    """
+    Viewer for Julia sets.
+    """
     def __init__(self, W=500, H=500, width=4.0, center=0.0+0.0j, c=0.0+0.0j,
                  palette=vibgyor()):
         Viewer.__init__(self, W, H, width, center, palette)
