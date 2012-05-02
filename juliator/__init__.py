@@ -15,7 +15,21 @@ elif sys.platform == 'linux2':
     GroupBG = '#e0e0e0'
     BrowserBG = '#a8a8a8'
     
-
+class Chooser(ttk.Menubutton):
+    def __init__(self, master, choices=[''], command=lambda x:None):
+        ttk.Menubutton.__init__(self, master)
+        self.variable = Tk_.StringVar(master)
+        self.variable.set(choices[0])
+        self.config(textvariable=self.variable)
+        self.menu = Tk_.Menu(master)
+        for choice in choices:
+            self.menu.add_command(
+                label=choice,
+                command=Tk_._setit(self.variable, choice, command)
+                )
+        self['menu'] = self.menu
+        self['width'] = max([len(c) for c in choices])
+                 
 def vibgyor(size=256):
     result = []
     M = float(size - 1)*1.125
@@ -48,6 +62,11 @@ class Viewer(ttk.LabelFrame):
         self.canvas.bind('<Button-3>', self.zoom_out)
         self.canvas.bind('<Key>', self.keypress)
         self.canvas.pack()
+        self.controlpanel = Tk_.Frame(self, bg=GroupBG, height=30)
+        self.max_choice = Chooser(self.controlpanel,
+                                  [str(256*2**n) for n in range(6)])
+        self.max_choice.grid(row=0, column=3)
+        self.controlpanel.pack(expand=True, fill=Tk_.X)
         self.mouse_location = Tk_.StringVar(self)
         self.image_name = None
         
@@ -89,12 +108,14 @@ class Viewer(ttk.LabelFrame):
                                                fill='white')
         else:
             z = self.iterator.get_Z(event.x, event.y)
+            zstr = '{0.real:0<10.7g}{0.imag:0<+10.7g} i'.format(z)
             if z:
-                self.mouse_location.set(str(z).replace('j','i'))
+                self.mouse_location.set(zstr)
             else:
                 self.mouse_location.set('')
 
     def leave(self,event):
+        self.mouse_location.set('')
         if self.box:
             self.canvas.delete(self.box)
 
