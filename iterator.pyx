@@ -86,11 +86,12 @@ cdef class Iterator:
             result += band
         return result
 
-    def Xget_image(self):
-        self.iterate(self.image_string, 0, 2)
-        self.iterate(self.image_string, 1, 2)
-        return bytes(self.image_string[:self.strsize])
-
+    def get_Z(self, m, n):
+        try:
+            return self.real_axis[m] + 1j*self.imag_axis[n]
+        except IndexError:
+            return None
+        
     def iterate(self):
         # Subclasses override this method
         pass

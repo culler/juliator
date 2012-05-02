@@ -87,6 +87,12 @@ class Viewer(ttk.LabelFrame):
             y0, y1 = self.y - delta_y, self.y + delta_y
             self.box = self.canvas.create_line(x0,y0,x1,y0,x1,y1,x0,y1,x0,y0,
                                                fill='white')
+        else:
+            z = self.iterator.get_Z(event.x, event.y)
+            if z:
+                self.mouse_location.set(str(z).replace('j','i'))
+            else:
+                self.mouse_location.set('')
 
     def leave(self,event):
         if self.box:
@@ -233,11 +239,22 @@ class Juliator:
             self.window = Tk_.Tk()
         self.window.title('Juliator')
         self.top = Tk_.Frame(self.window, bg=WindowBG)
-        self.mandelbrot = Mandelbrot(self.top)
-        self.mandelbrot.grid(row=0, column=0, padx=4, pady=4)
-        self.mandelbrot.julia.grid(row=0, column=1, padx=4, pady=4)
+        self.mandelbrot = mandelbrot = Mandelbrot(self.top)
+        self.julia = julia = mandelbrot.julia
+        mandelbrot.grid(row=0, column=0, padx=4, pady=4)
+        julia.grid(row=0, column=1, padx=4, pady=4)
         self.top.grid(row=0, column=0)
         self.separator = ttk.Separator(self.window, orient=Tk_.HORIZONTAL)
         self.separator.grid(row=1, column=0, sticky=Tk_.EW)
         self.bottom = Tk_.Frame(self.window, bg='white', height=20)
+        self.bottom.columnconfigure(0, weight=1)
+        self.bottom.columnconfigure(1, weight=1)
+        self.mandel_where = Tk_.Label(self.bottom, width=40, anchor=Tk_.W,
+                                      bg='white',
+                                      textvar=mandelbrot.mouse_location)
+        self.mandel_where.grid(sticky=Tk_.W, padx=10, row=0, column=0)
+        self.julia_where = Tk_.Label(self.bottom, width=40, anchor=Tk_.W,
+                                     bg='white',
+                                     textvar=julia.mouse_location)
+        self.julia_where.grid(sticky=Tk_.W, padx=10, row=0, column=1)
         self.bottom.grid(row=2, column=0, sticky=Tk_.NSEW)
