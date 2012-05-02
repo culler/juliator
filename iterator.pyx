@@ -30,9 +30,9 @@ cdef class Iterator:
     def __init__(self, int W=500, int H=500, int max=255,
                  BL=-1-1j, TR=1+1j, param=0+0j):
         if W <= 0 or H <= 0:
-            raise ValueError("Image dimensions must be positive.")
+            raise ValueError('Image dimensions must be positive.')
         if max < 0 or max > 255:
-            raise ValueError('The value of max must lie between 0 and 255.')
+            raise ValueError('The value of max must be positive.')
         if (self.image_string == NULL or
             self.real_axis == NULL or
             self.imag_axis == NULL):
@@ -65,6 +65,12 @@ cdef class Iterator:
         self.BL, self.TR, self.param = BL, TR, param
         self.build_axes()
 
+    def set_max(self, int max):
+        if self.max > 0:
+            self.max = max
+        else:
+            raise ValueError('Max must be positive.')
+                             
     def get_image(self):
         processes = []
         bands = list(range(self.cpus))
@@ -103,7 +109,7 @@ cdef class Z_Iterator(Iterator):
     (Computes the Julia set for C = param.)
     """
     def iterate(self, int band=0, int num_bands=1):
-        cdef int N, H0, H1, d, i, j, iterations, maxit=self.max+1
+        cdef int N, H0, H1, d, i, j, k, iterations, maxit=self.max+1
         cdef double R, I, RR, II
         cdef double Cr=self.param.real, Ci=self.param.imag
         cdef double *Zr = self.real_axis, *Zi=self.imag_axis
@@ -114,10 +120,12 @@ cdef class Z_Iterator(Iterator):
         N = H0*self.W
         for j in range(H0, H1):
             for i in range(self.W):
+                iterations = 0
                 R, I = Zr[i], Zi[j]
-                for iterations in range(maxit):
+                for k in range(maxit):
                     RR, II = R*R, I*I
                     if RR + II > 4.0:
+                        iterations = k+1
                         break
                     I = 2*I*R + Ci
                     R = RR - II + Cr
@@ -132,7 +140,7 @@ cdef class C_Iterator(Iterator):
     escapes.  (Computes the Mandelbrot set, with param=0+0j.)
     """
     def iterate(self, int band=0, int num_bands=1):
-        cdef int N, H0, H1, d, i, j, iterations, maxit=self.max+1
+        cdef int N, H0, H1, d, i, j, k, iterations, maxit=self.max+1
         cdef double R, I, RR, II
         cdef double R0=self.param.real, I0=self.param.imag
         cdef double *Cr=self.real_axis, *Ci=self.imag_axis
@@ -148,13 +156,15 @@ cdef class C_Iterator(Iterator):
         for j in range(H0, H1):
             for i in range(self.W):
                 R, I = R0, I0
-                for iterations in range(maxit):
+                iterations = 0
+                for k in range(1, maxit):
                     RR, II = R*R, I*I
                     if RR + II > 4.0:
+                        iterations = k
                         break
                     I = 2*I*R + Ci[j]
                     R = RR - II + Cr[i]
-                imgstr[N] = iterations
+                imgstr[N] = iterations & 255
                 N += 1
         self.queue.put( (band, bytes(imgstr[H0*self.W: N]) ) )
 
@@ -164,7 +174,7 @@ def iterate(int W, int H, int max, z0, z1, c0, c1):
     Arguments:
         W       image width
         H       image height
-        max     maximum number of iterates (0 <= max <= 255)
+        max     maximum number of iterates
         z0, z1  corners of a box in the z-domain
         c0, c1  corners of a box in the c-domain
 

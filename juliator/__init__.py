@@ -16,6 +16,9 @@ elif sys.platform == 'linux2':
     BrowserBG = '#a8a8a8'
     
 class Chooser(ttk.Menubutton):
+    """
+    The ttk Menubutton is useless out of the box.
+    """
     def __init__(self, master, choices=[''], command=lambda x:None):
         ttk.Menubutton.__init__(self, master)
         self.variable = Tk_.StringVar(master)
@@ -31,12 +34,11 @@ class Chooser(ttk.Menubutton):
         self['width'] = max([len(c) for c in choices])
                  
 def vibgyor(size=256):
-    result = []
+    result = [0,0,0]
     M = float(size - 1)*1.125
     for n in range(size-1):
         r, g, b = colorsys.hsv_to_rgb(n/M, 0.85, 1.0)
         result += [int(r*255), int(g*255), int(b*255)]
-    result += [0,0,0]
     return result
 
 class Viewer(ttk.LabelFrame):
@@ -63,9 +65,15 @@ class Viewer(ttk.LabelFrame):
         self.canvas.bind('<Key>', self.keypress)
         self.canvas.pack()
         self.controlpanel = Tk_.Frame(self, bg=GroupBG, height=30)
+        self.controlpanel.columnconfigure(1, weight=1)
+        label = Tk_.Label(self.controlpanel,
+                          text='Cutoff: ',
+                          bg=GroupBG)
+        label.grid(row=0, column=0)
         self.max_choice = Chooser(self.controlpanel,
-                                  [str(256*2**n) for n in range(6)])
-        self.max_choice.grid(row=0, column=3)
+                                  [str(256*2**n) for n in range(6)],
+                                  command=self.set_max)
+        self.max_choice.grid(row=0, column=1, sticky=Tk_.W)
         self.controlpanel.pack(expand=True, fill=Tk_.X)
         self.mouse_location = Tk_.StringVar(self)
         self.image_name = None
@@ -78,8 +86,7 @@ class Viewer(ttk.LabelFrame):
 
     # Subclasses should override this, and call from __init__.
     def set(self, width=None, center=None):
-        if width != None: self.width = width
-        if center != None: self.center = center
+        pass
 
     # Subclasses should provide an iterator attribute
     def display_image(self):
@@ -95,6 +102,10 @@ class Viewer(ttk.LabelFrame):
                                            image=self.bitmap)
         self.canvas.delete(self.image_name)
         self.image_name = image_name
+        
+    def set_max(self, newmax):
+        self.iterator.set_max(int(newmax))
+        self.set(self.width, self.center)
         
     def motion(self, event):
         if self.dragging == 1:
