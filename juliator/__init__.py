@@ -76,6 +76,7 @@ class Viewer(ttk.LabelFrame):
         self.max_choice.grid(row=0, column=1, sticky=Tk_.W)
         self.controlpanel.pack(expand=True, fill=Tk_.X)
         self.mouse_location = Tk_.StringVar(self)
+        self.escape_time = Tk_.StringVar(self)
         self.image_name = None
         
     def keypress(self, event):
@@ -90,9 +91,9 @@ class Viewer(ttk.LabelFrame):
 
     # Subclasses should provide an iterator attribute
     def display_image(self):
-        #start = time.time()
+        start = time.time()
         self.imagestring = self.iterator.get_image()
-        #print time.time() - start
+        print time.time() - start
         self.image = Image.fromstring('P', (self.W, self.H),
                                       self.imagestring)
         self.image.putpalette(self.palette)
@@ -120,13 +121,17 @@ class Viewer(ttk.LabelFrame):
         else:
             z = self.iterator.get_Z(event.x, event.y)
             zstr = '{0.real:0<10.7g}{0.imag:0<+10.7g} i'.format(z)
+            N = self.iterator.get_escape(event.x, event.y)
             if z:
                 self.mouse_location.set(zstr)
+                self.escape_time.set('Escape time: %d'%N)
             else:
                 self.mouse_location.set('')
+                self.escape_time.set('')
 
     def leave(self,event):
         self.mouse_location.set('')
+        self.escape_time.set('')
         if self.box:
             self.canvas.delete(self.box)
 
@@ -223,7 +228,7 @@ class Julia(Viewer):
     def toggle_fill(self, event):
         if self.filled:
             self.filled = False
-            bdry = boundary(self.imagestring, self.W, self.H, 255)
+            bdry = boundary(self.imagestring, self.W, self.H)
             self.image = Image.fromstring('L', (self.W, self.H), bdry)
         else:
             self.filled = True
@@ -244,12 +249,12 @@ class Julia(Viewer):
                 )
 
     def box_dimension(self, boundary):
-        count = boxcount(boundary, self.W, self.H, 255)
+        count = boxcount(boundary, self.W, self.H)
         data = []
-        for i in range(len(count)):
+        for n in range(len(count)):
             try:
-                data.append( (-(i+1)*math.log(2), math.log(count[i]) ) )
-            except OverflowError:
+                data.append( (-(n+1)*math.log(2), math.log(count[n]) ) )
+            except ValueError:
                 pass
         X, Y, XY, XX = 0.0, 0.0, 0.0, 0.0
         if len(data) == 0:
@@ -279,14 +284,22 @@ class Juliator:
         self.separator = ttk.Separator(self.window, orient=Tk_.HORIZONTAL)
         self.separator.grid(row=1, column=0, sticky=Tk_.EW)
         self.bottom = Tk_.Frame(self.window, bg='white', height=20)
-        self.bottom.columnconfigure(0, weight=1)
         self.bottom.columnconfigure(1, weight=1)
-        self.mandel_where = Tk_.Label(self.bottom, width=40, anchor=Tk_.W,
+        self.bottom.columnconfigure(3, weight=1)
+        self.mandel_where = Tk_.Label(self.bottom, width=20, anchor=Tk_.W,
                                       bg='white',
                                       textvar=mandelbrot.mouse_location)
         self.mandel_where.grid(sticky=Tk_.W, padx=10, row=0, column=0)
-        self.julia_where = Tk_.Label(self.bottom, width=40, anchor=Tk_.W,
+        self.mandel_when = Tk_.Label(self.bottom, width=20, anchor=Tk_.W,
+                                      bg='white',
+                                      textvar=mandelbrot.escape_time)
+        self.mandel_when.grid(sticky=Tk_.W, padx=10, row=0, column=1)
+        self.julia_where = Tk_.Label(self.bottom, width=20, anchor=Tk_.W,
                                      bg='white',
                                      textvar=julia.mouse_location)
-        self.julia_where.grid(sticky=Tk_.W, padx=10, row=0, column=1)
+        self.julia_where.grid(sticky=Tk_.W, padx=10, row=0, column=2)
+        self.julia_when = Tk_.Label(self.bottom, width=20, anchor=Tk_.W,
+                                     bg='white',
+                                     textvar=julia.escape_time)
+        self.julia_when.grid(sticky=Tk_.W, padx=10, row=0, column=3)
         self.bottom.grid(row=2, column=0, sticky=Tk_.NSEW)

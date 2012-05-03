@@ -3,27 +3,34 @@ cdef extern from "stdlib.h":
     void* malloc(size_t size)
     void free(void* mem)
 
-from multiprocessing import Process, Queue, cpu_count
+from multiprocessing import Process, Queue, cpu_count, heap
+from multiprocessing.sharedctypes import RawArray
+from math import log
+import ctypes
 
 cdef class Iterator:
     cdef int W, H, max, strsize, cpus
     cdef double* real_axis
     cdef double* imag_axis
+    cdef unsigned char* log_scale
     cdef unsigned char* image_string
-    cdef BL, TR, param, queue
+    cdef BL, TR, param, queue, counts
     
     def __cinit__(self, int W=500, int H=500, int max=255,
                   BL=-1-1j, TR=1+1j, param=0+0j):
         if W <= 0 or H <= 0:
             self.image_string = self.real_axis = self.imag_axis = NULL
             return
-        self.strsize = strsize = W*H
+        self.log_scale = NULL
+        self.max = 0
+        strsize = W*H
         self.image_string = <unsigned char *>malloc(strsize*sizeof(char))
         self.real_axis = <double *>malloc(W*sizeof(double));
         self.imag_axis = <double *>malloc(H*sizeof(double));
-
+        
     def __dealloc__(self):
         free(self.image_string)
+        free(self.log_scale)
         free(self.real_axis)
         free(self.imag_axis)
 
@@ -33,6 +40,7 @@ cdef class Iterator:
             raise ValueError('Image dimensions must be positive.')
         if max < 0 or max > 255:
             raise ValueError('The value of max must be positive.')
+        self.set_max(max)
         if (self.image_string == NULL or
             self.real_axis == NULL or
             self.imag_axis == NULL):
@@ -40,6 +48,7 @@ cdef class Iterator:
         self.W, self.H, self.max = W, H, max
         self.cpus = cpu_count()
         self.queue = Queue()
+        self.counts = RawArray('H', W*H)
         self.set(BL, TR, param)
         
     def __repr__(self):
@@ -66,15 +75,25 @@ cdef class Iterator:
         self.build_axes()
 
     def set_max(self, int max):
-        if self.max > 0:
-            self.max = max
-        else:
+        cdef int n
+        cdef unsigned char *log_scale
+        if max < 1:
             raise ValueError('Max must be positive.')
-                             
+        if max == self.max:
+            return
+        self.max = max
+        log_scale = <unsigned char *>malloc((1+max)*sizeof(char))
+        if log_scale == NULL:
+            raise RuntimeError('Out of memory')
+        free(self.log_scale)
+        self.log_scale = log_scale
+        log_scale[0] = 0
+        for n in range(1, 1+max):
+            log_scale[n] = min(n, int(1 + 254*log(n)/log(max)))
+        
     def get_image(self):
         processes = []
-        bands = list(range(self.cpus))
-        result = bytes('')
+        bands = [None]*self.cpus
         # Start a worker process for each cpu.
         for n in range(self.cpus):
             P = Process(target=self.iterate, args=[n, self.cpus])
@@ -87,16 +106,20 @@ cdef class Iterator:
         # Join all the subprocesses - "probably good practice"
         for P in processes:
             P.join()
-        # Merge the bands 
-        for band in bands:
-            result += band
-        return result
+        # Merge the bands
+        return ''.join(bands)
 
     def get_Z(self, m, n):
         try:
             return self.real_axis[m] + 1j*self.imag_axis[n]
         except IndexError:
             return None
+
+    def get_escape(self, m, n):
+        try:
+            return self.counts[n*self.W + m]
+        except IndexError:
+            return -1
         
     def iterate(self):
         # Subclasses override this method
@@ -109,17 +132,20 @@ cdef class Z_Iterator(Iterator):
     (Computes the Julia set for C = param.)
     """
     def iterate(self, int band=0, int num_bands=1):
-        cdef int N, H0, H1, d, i, j, k, iterations, maxit=self.max+1
+        cdef int N, H0, H1, W, d, i, j, k, iterations, maxit=self.max+1
+        cdef unsigned char* log_scale = self.log_scale
         cdef double R, I, RR, II
         cdef double Cr=self.param.real, Ci=self.param.imag
         cdef double *Zr = self.real_axis, *Zi=self.imag_axis
         cdef unsigned char* imgstr = self.image_string
+        cdef counts = self.counts
         d = self.H/num_bands
         H0 = band*d
         H1 = self.H if band == num_bands-1 else H0 + d
         N = H0*self.W
+        W = self.W
         for j in range(H0, H1):
-            for i in range(self.W):
+            for i in range(W):
                 iterations = 0
                 R, I = Zr[i], Zi[j]
                 for k in range(maxit):
@@ -129,9 +155,10 @@ cdef class Z_Iterator(Iterator):
                         break
                     I = 2*I*R + Ci
                     R = RR - II + Cr
-                imgstr[N] = iterations
+                counts[N] = iterations
+                imgstr[N] = log_scale[iterations]
                 N += 1
-        self.queue.put( (band, bytes(imgstr[H0*self.W: N]) ) )
+        self.queue.put( (band, bytes(imgstr[H0*W: N]) ) )
         
 cdef class C_Iterator(Iterator):
     """
@@ -140,11 +167,13 @@ cdef class C_Iterator(Iterator):
     escapes.  (Computes the Mandelbrot set, with param=0+0j.)
     """
     def iterate(self, int band=0, int num_bands=1):
-        cdef int N, H0, H1, d, i, j, k, iterations, maxit=self.max+1
+        cdef int N, H0, H1, W, d, i, j, k, iterations, maxit=self.max+1
+        cdef unsigned char *log_scale = self.log_scale
         cdef double R, I, RR, II
         cdef double R0=self.param.real, I0=self.param.imag
         cdef double *Cr=self.real_axis, *Ci=self.imag_axis
         cdef unsigned char* imgstr = self.image_string
+        cdef counts = self.counts
         # Actually, each process gets its own copy of self.image_string
         # but I am having each one write to its own part, in case I
         # decide it is worthwhile trying to share the string instead
@@ -152,9 +181,10 @@ cdef class C_Iterator(Iterator):
         d = self.H/num_bands
         H0 = band*d
         H1 = self.H if band == num_bands-1 else H0 + d
-        N = H0*self.W # may as well start here
+        W = self.W
+        N = H0*W
         for j in range(H0, H1):
-            for i in range(self.W):
+            for i in range(W):
                 R, I = R0, I0
                 iterations = 0
                 for k in range(1, maxit):
@@ -164,9 +194,10 @@ cdef class C_Iterator(Iterator):
                         break
                     I = 2*I*R + Ci[j]
                     R = RR - II + Cr[i]
-                imgstr[N] = iterations & 255
+                counts[N] = iterations
+                imgstr[N] = self.log_scale[iterations]
                 N += 1
-        self.queue.put( (band, bytes(imgstr[H0*self.W: N]) ) )
+        self.queue.put( (band, bytes(imgstr[H0*W: N]) ) )
 
 def iterate(int W, int H, int max, z0, z1, c0, c1):
     """
@@ -250,16 +281,15 @@ def iterate(int W, int H, int max, z0, z1, c0, c1):
     # Return a string (as bytes)
     return result
 
-def boundary(image, int W, int H, int max):
+def boundary(image, int W, int H):
     """
     Generates a black and white image of the boundary of a colored region.
     Arguments:
         image    the image as a string
         W        the width of the image
         H        the height of the image
-        max      threshold
     Returns an image which is the boundary of the region in which pixel
-    values are less than max.
+    values are 0.
     """
     cdef unsigned char *in_string = image 
     cdef unsigned char *out_string
@@ -268,8 +298,6 @@ def boundary(image, int W, int H, int max):
     # Validate arguments
     if length != len(image):
         raise ValueError('Invalid image dimensions.')
-    if max < 0 or max > 255:
-        raise ValueError('The value of max must lie between 0 and 255.')
     # Allocate memory
     out_string = <unsigned char *>malloc(length*sizeof(char))
     # Find the boundary
@@ -277,11 +305,11 @@ def boundary(image, int W, int H, int max):
         for j in range(H):
             p = i+j*W;
             out_string[p] = 255;
-            if (in_string[p] < max):
-                if ( (i > 0 and in_string[p-1] >= max) or
-                     (i < W and in_string[p+1] >= max) or
-                     (j > 0 and in_string[p-W] >= max) or
-                     (j < H and in_string[p+W] >= max) ):
+            if (in_string[p] > 0):
+                if ( (i > 0 and in_string[p-1] == 0) or
+                     (i < W and in_string[p+1] == 0) or
+                     (j > 0 and in_string[p-W] == 0) or
+                     (j < H and in_string[p+W] == 0) ):
                     out_string[p] = 0;
     result = bytes(out_string[:length])
     # Free memory
@@ -289,7 +317,7 @@ def boundary(image, int W, int H, int max):
     # Return a string (as bytes)
     return result
 
-def boxcount(image, int W, int H, int max):
+def boxcount(image, int W, int H, int max = 255):
     """
     Inputs an image as a string. Counts how many boxes of size 2^i
     meet the image.  Returns a list of integers, where the ith integer
