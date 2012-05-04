@@ -4,7 +4,6 @@ import Image
 import ImageTk
 import os, sys, math, cmath, colorsys, time
 from iterator import C_Iterator, Z_Iterator, boundary, boxcount
-#from multiprocessing import Process, Queue, cpu_count
 
 if sys.platform == 'darwin':
     WindowBG = 'SystemDialogBackgroundActive'
@@ -121,10 +120,12 @@ class Viewer(ttk.LabelFrame):
         else:
             z = self.iterator.get_Z(event.x, event.y)
             zstr = '{0.real:0<10.7g}{0.imag:0<+10.7g} i'.format(z)
-            N = self.iterator.get_escape(event.x, event.y)
+            escape = self.iterator.get_escape(event.x, event.y)
+            if escape == 0:
+                escape = '> cutoff'
             if z:
                 self.mouse_location.set(zstr)
-                self.escape_time.set('Escape time: %d'%N)
+                self.escape_time.set('Escape time: %s'%escape)
             else:
                 self.mouse_location.set('')
                 self.escape_time.set('')

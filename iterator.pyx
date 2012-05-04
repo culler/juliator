@@ -1,17 +1,34 @@
+ctypedef unsigned long size_t
+ctypedef long off_t
+
 cdef extern from "stdlib.h":
-    ctypedef unsigned long size_t
     void* malloc(size_t size)
     void free(void* mem)
 
-from multiprocessing import Process, Queue, cpu_count #, heap
-#from multiprocessing.sharedctypes import RawArray
+cdef extern from "sys/mman.h":
+    void* mmap(void *addr, size_t len, int prot, int flags, int fd,
+               off_t offset)
+    int munmap(void *addr, size_t len)
+    cdef enum:
+        PROT_NONE
+        PROT_READ
+        PROT_WRITE
+        PROT_EXEC
+        MAP_ANON
+        MAP_FILE
+        MAP_SHARED
+        MAP_PRIVATE
+        MAP_FIXED
+
+from multiprocessing import Process, cpu_count
 from math import log
 
 cdef class Iterator:
     cdef int W, H, max, strsize, cpus
     cdef double *real_axis, *imag_axis
-    cdef unsigned char *log_scale, *image_string, *lo_count, *hi_count
-    cdef BL, TR, param, queue, lo_escape, hi_escape
+    cdef unsigned char *log_scale, *image_string
+    cdef unsigned short *counts
+    cdef BL, TR, param, queue
     
     def __cinit__(self, int W=500, int H=500, int max=255,
                   BL=-1-1j, TR=1+1j, param=0+0j):
@@ -19,18 +36,26 @@ cdef class Iterator:
             return
         self.log_scale = NULL
         self.max = 0
-        strsize = W*H
-        self.image_string = <unsigned char *>malloc(strsize*sizeof(char))
-        self.lo_count = <unsigned char *>malloc(strsize*sizeof(char))
-        self.hi_count = <unsigned char *>malloc(strsize*sizeof(char))
+        self.strsize = strsize = W*H
+        # Get shared memory, so it will be visible to subprocesses.
+        self.image_string = <unsigned char *>mmap(NULL,
+                                             strsize*sizeof(char),
+                                             PROT_READ|PROT_WRITE,
+                                             MAP_ANON|MAP_SHARED,
+                                             0, 0)
+        self.counts = <unsigned short *>mmap(NULL,
+                                             strsize*sizeof(short),
+                                             PROT_READ|PROT_WRITE,
+                                             MAP_ANON|MAP_SHARED,
+                                             0, 0)
+        # These are private -- malloc is fine.
         self.real_axis = <double *>malloc(W*sizeof(double));
         self.imag_axis = <double *>malloc(H*sizeof(double));
         
     def __dealloc__(self):
         free(self.log_scale)
-        free(self.image_string)
-        free(self.lo_count)
-        free(self.hi_count)
+        munmap(self.image_string, self.strsize*sizeof(char))
+        munmap(self.counts, self.strsize*sizeof(short))
         free(self.real_axis)
         free(self.imag_axis)
 
@@ -39,13 +64,11 @@ cdef class Iterator:
         if W <= 0 or H <= 0:
             raise ValueError('Image dimensions must be positive.')
         self.set_max(max)
-        if not (self.image_string and self.lo_count and
-                self.hi_count and self.real_axis and self.imag_axis):
+        if not (self.image_string and self.counts and
+                self.real_axis and self.imag_axis):
             raise MemoryError
         self.W, self.H, self.max = W, H, max
         self.cpus = cpu_count()
-        self.queue = Queue()
-#        self.counts = RawArray('H', W*H)
         self.set(BL, TR, param)
         
     def __repr__(self):
@@ -60,7 +83,8 @@ cdef class Iterator:
         for i in range(self.W):
             self.real_axis[i] = R
             R += delta
-        I = self.TR.imag # For graphics, the y axis points down
+        I = self.TR.imag
+        # For graphics, the y axis points down
         delta = (self.BL.imag - I)/self.H
         for i in range(self.H):
             self.imag_axis[i] = I
@@ -80,8 +104,8 @@ cdef class Iterator:
             return
         self.max = max
         log_scale = <unsigned char *>malloc((1+max)*sizeof(char))
-        if log_scale == NULL:
-            raise RuntimeError('Out of memory')
+        if not log_scale:
+            raise MemoryError
         free(self.log_scale)
         self.log_scale = log_scale
         log_scale[0] = 0
@@ -90,26 +114,15 @@ cdef class Iterator:
         
     def get_image(self):
         processes = []
-        bands = [None]*self.cpus
-        lows =  [None]*self.cpus
-        highs = [None]*self.cpus
         # Start a worker process for each cpu.
         for n in range(self.cpus):
             P = Process(target=self.iterate, args=[n, self.cpus])
             processes.append(P)
             P.start()
-        # Collect the results
-        for n in range(self.cpus):
-            k, image, low, high = self.queue.get()
-            bands[k], lows[k], highs[k] = image, low, high
         # Join all the subprocesses - "probably good practice"
         for P in processes:
             P.join()
-        # Merge the escape times
-        self.lo_escape = ''.join(lows)
-        self.hi_escape = ''.join(highs)
-        # Merge the bands
-        return ''.join(bands)
+        return self.image_string[:self.strsize]
 
     def get_Z(self, m, n):
         try:
@@ -118,11 +131,8 @@ cdef class Iterator:
             return None
 
     def get_escape(self, int m, int n):
-        cdef i = n*self.W + m
         try:
-            low = ord(self.lo_escape[i])
-            high = ord(self.hi_escape[i])
-            return low + (high << 8)
+            return self.counts[n*self.W + m]
         except IndexError:
             return -1
         
@@ -143,9 +153,8 @@ cdef class Z_Iterator(Iterator):
         cdef double Cr=self.param.real, Ci=self.param.imag
         cdef double *Zr = self.real_axis, *Zi=self.imag_axis
         cdef unsigned char* imgstr = self.image_string
-        cdef unsigned char* low = self.lo_count
-        cdef unsigned char* high = self.hi_count
-#        cdef counts = self.counts
+        cdef unsigned short* counts = self.counts
+
         d = self.H/num_bands
         H0 = band*d
         H1 = self.H if band == num_bands-1 else H0 + d
@@ -162,16 +171,9 @@ cdef class Z_Iterator(Iterator):
                         break
                     I = 2*I*R + Ci
                     R = RR - II + Cr
-                #counts[N] = iterations
+                counts[N] = iterations
                 imgstr[N] = log_scale[iterations]
-                low[N] = iterations & 255
-                high[N] = iterations >> 8
                 N += 1
-        self.queue.put( (band,
-                         bytes(imgstr[S:N]),
-                         bytes(low[S:N]),
-                         bytes(high[S:N]),
-                         ) )
         
 cdef class C_Iterator(Iterator):
     """
@@ -186,18 +188,14 @@ cdef class C_Iterator(Iterator):
         cdef double R0=self.param.real, I0=self.param.imag
         cdef double *Cr=self.real_axis, *Ci=self.imag_axis
         cdef unsigned char* imgstr = self.image_string
-        cdef unsigned char* low = self.lo_count
-        cdef unsigned char* high = self.hi_count
-        #cdef counts = self.counts
-        # Actually, each process gets its own copy of self.image_string
-        # but I am having each one write to its own part, in case I
-        # decide it is worthwhile trying to share the string instead
-        # of using a queue.
+        cdef unsigned short* counts = self.counts
+
         d = self.H/num_bands
         H0 = band*d
         H1 = self.H if band == num_bands-1 else H0 + d
         W = self.W
         S = N = H0*W
+        # For speed -- no python calls in this loop!
         for j in range(H0, H1):
             for i in range(W):
                 R, I = R0, I0
@@ -209,16 +207,9 @@ cdef class C_Iterator(Iterator):
                         break
                     I = 2*I*R + Ci[j]
                     R = RR - II + Cr[i]
-                #counts[N] = iterations
+                counts[N] = iterations
                 imgstr[N] = self.log_scale[iterations]
-                low[N] = iterations & 255
-                high[N] = iterations >> 8
                 N += 1
-        self.queue.put( (band,
-                         bytes(imgstr[S:N]),
-                         bytes(low[S:N]),
-                         bytes(high[S:N]),
-                         ) )
 
 def boundary(image, int W, int H):
     """
