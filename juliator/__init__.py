@@ -13,7 +13,10 @@ elif sys.platform == 'linux2':
     WindowBG = '#e0e0e0'
     GroupBG = '#e0e0e0'
     BrowserBG = '#a8a8a8'
-    
+
+cx_format = '{0.real:0<10.7g}{0.imag:0<+10.7g} i'
+cx_format = '{0.real:<.5g}{0.imag:<+.5g} i'
+
 class Chooser(ttk.Menubutton):
     """
     The ttk Menubutton is useless out of the box.
@@ -64,15 +67,26 @@ class Viewer(ttk.LabelFrame):
         self.canvas.bind('<Key>', self.keypress)
         self.canvas.pack()
         self.controlpanel = Tk_.Frame(self, bg=GroupBG, height=30)
-        self.controlpanel.columnconfigure(1, weight=1)
-        label = Tk_.Label(self.controlpanel,
-                          text='Cutoff: ',
-                          bg=GroupBG)
-        label.grid(row=0, column=0)
+#        self.controlpanel.columnconfigure(1, weight=1)
+        label = Tk_.Label(self.controlpanel, text='  Cutoff: ', bg=GroupBG)
+#        label.grid(row=0, column=0)
+        label.pack(side=Tk_.LEFT)
         self.max_choice = Chooser(self.controlpanel,
                                   [str(256*2**n) for n in range(6)],
                                   command=self.set_max)
-        self.max_choice.grid(row=0, column=1, sticky=Tk_.W)
+        self.max_choice.pack(side=Tk_.LEFT)
+        self.show_center = Tk_.StringVar(self)
+        label = Tk_.Label(self.controlpanel, text='  Center:', bg=GroupBG)
+        label.pack(side=Tk_.LEFT)
+        label = Tk_.Label(self.controlpanel,
+                          textvar=self.show_center, bg=GroupBG)
+        label.pack(side=Tk_.LEFT)
+        self.show_width = Tk_.StringVar(self)
+        label = Tk_.Label(self.controlpanel, text='  Width:', bg=GroupBG)
+        label.pack(side=Tk_.LEFT)
+        label = Tk_.Label(self.controlpanel,
+                          textvar=self.show_width, bg=GroupBG)
+        label.pack(side=Tk_.LEFT)
         self.controlpanel.pack(expand=True, fill=Tk_.X)
         self.mouse_location = Tk_.StringVar(self)
         self.escape_time = Tk_.StringVar(self)
@@ -88,11 +102,11 @@ class Viewer(ttk.LabelFrame):
     def set(self, width=None, center=None):
         pass
 
-    # Subclasses should provide an iterator attribute
+    # Subclasses must provide an iterator attribute.
     def display_image(self):
-        start = time.time()
+        #start = time.time()
         self.imagestring = self.iterator.get_image()
-        print time.time() - start
+        #print time.time() - start
         self.image = Image.fromstring('P', (self.W, self.H),
                                       self.imagestring)
         self.image.putpalette(self.palette)
@@ -119,12 +133,11 @@ class Viewer(ttk.LabelFrame):
                                                fill='white')
         else:
             z = self.iterator.get_Z(event.x, event.y)
-            zstr = '{0.real:0<10.7g}{0.imag:0<+10.7g} i'.format(z)
             escape = self.iterator.get_escape(event.x, event.y)
             if escape == 0:
                 escape = '> cutoff'
             if z:
-                self.mouse_location.set(zstr)
+                self.mouse_location.set(cx_format.format(z))
                 self.escape_time.set('Escape time: %s'%escape)
             else:
                 self.mouse_location.set('')
@@ -183,6 +196,8 @@ class Mandelbrot(Viewer):
         c1 = self.center + (self.width + height)/2
         self.iterator.set(c0, c1, 0+0j)
         self.display_image()
+        self.show_center.set(cx_format.format(self.center))
+        self.show_width.set('%.6g'%self.width)
         self.show_julia()
 
     def show_julia(self, event=None, center = 0+0j):
@@ -225,6 +240,8 @@ class Julia(Viewer):
         z1 = self.center + (self.width + height)/2
         self.iterator.set(z0, z1, self.c)
         self.display_image()
+        self.show_center.set(cx_format.format(self.center))
+        self.show_width.set('%.6g'%self.width)
 
     def toggle_fill(self, event):
         if self.filled:
