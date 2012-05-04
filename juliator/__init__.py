@@ -3,8 +3,8 @@ import ttk
 import Image
 import ImageTk
 import os, sys, math, cmath, colorsys, time
-from iterator import iterate, boundary, boxcount, C_Iterator, Z_Iterator
-from multiprocessing import Process, Queue, cpu_count
+from iterator import C_Iterator, Z_Iterator, boundary, boxcount
+#from multiprocessing import Process, Queue, cpu_count
 
 if sys.platform == 'darwin':
     WindowBG = 'SystemDialogBackgroundActive'
