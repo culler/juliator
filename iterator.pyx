@@ -42,12 +42,12 @@ cdef class Iterator:
                                              strsize*sizeof(char),
                                              PROT_READ|PROT_WRITE,
                                              MAP_ANON|MAP_SHARED,
-                                             0, 0)
+                                             -1, 0)
         self.counts = <unsigned short *>mmap(NULL,
                                              strsize*sizeof(short),
                                              PROT_READ|PROT_WRITE,
                                              MAP_ANON|MAP_SHARED,
-                                             0, 0)
+                                             -1, 0)
         # These are private -- malloc is fine.
         self.real_axis = <double *>malloc(W*sizeof(double));
         self.imag_axis = <double *>malloc(H*sizeof(double));
