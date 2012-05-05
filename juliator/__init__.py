@@ -1,7 +1,14 @@
-import Tkinter as Tk_
-import ttk
-import Image
-import ImageTk
+try:
+    import Tkinter as Tk_
+    import ttk
+    import tkFileDialog
+    import tkMessageBox
+except ImportError: # Python3
+    import tkinter as Tk_
+    from tkinter import ttk
+    import tkinter.filedialog as tkFileDialog
+    import tkinter.messagebox as tkMessageBox
+from PIL import Image, ImageTk
 import os, sys, math, cmath, colorsys, time
 from iterator import C_Iterator, Z_Iterator, boundary, boxcount
 
@@ -34,7 +41,10 @@ class Chooser(ttk.Menubutton):
                 )
         self['menu'] = self.menu
         self['width'] = max([len(c) for c in choices])
-                 
+
+    def get(self):
+        return self.variable.get()
+    
 def vibgyor(size=256):
     result = [0,0,0]
     M = float(size - 1)*1.125
@@ -54,22 +64,22 @@ class Viewer(ttk.LabelFrame):
         self.W, self.H, self.aspect = W, H, float(H)/float(W)
         self.image = None
         self.dragging = 0
+        self.ctrl_dragging = 0
         self.box = None
-        self.dot = None
         self.palette = palette
         self.canvas = Tk_.Canvas(self, width=W, height=H, bd=0, bg=GroupBG,
                                  highlightbackground=GroupBG)
         self.canvas.bind('<Motion>', self.motion)
         self.canvas.bind('<Leave>', self.leave)
-        self.canvas.bind('<Button-1>', self.mouse_down)
-        self.canvas.bind('<ButtonRelease-1>', self.mouse_up)
+        self.canvas.bind('<Button-1>', self.click)
+        self.canvas.bind('<ButtonRelease-1>', self.unclick)
+        self.canvas.bind('<Control-Button-1>', self.ctrl_click)
+        self.canvas.bind('<Control-ButtonRelease-1>', self.unclick)
         self.canvas.bind('<Button-3>', self.zoom_out)
         self.canvas.bind('<Key>', self.keypress)
         self.canvas.pack()
         self.controlpanel = Tk_.Frame(self, bg=GroupBG, height=30)
-#        self.controlpanel.columnconfigure(1, weight=1)
         label = Tk_.Label(self.controlpanel, text='  Cutoff: ', bg=GroupBG)
-#        label.grid(row=0, column=0)
         label.pack(side=Tk_.LEFT)
         self.max_choice = Chooser(self.controlpanel,
                                   [str(256*2**n) for n in range(6)],
@@ -106,7 +116,7 @@ class Viewer(ttk.LabelFrame):
     def display_image(self):
         #start = time.time()
         self.imagestring = self.iterator.get_image()
-        #print time.time() - start
+        #print(time.time() - start)
         self.image = Image.fromstring('P', (self.W, self.H),
                                       self.imagestring)
         self.image.putpalette(self.palette)
@@ -117,6 +127,25 @@ class Viewer(ttk.LabelFrame):
         self.canvas.delete(self.image_name)
         self.image_name = image_name
         
+    def save_image(self):
+        filename = tkFileDialog.asksaveasfilename(
+            initialfile='unnamed.png',
+            )
+        if filename:
+            try:
+                self.image.save(filename)
+            except KeyError:
+                extension = os.path.splitext(filename)[-1]
+                tkMessageBox.showwarning(
+                    'Save image',
+                    'The image file extension %s is unknown.'%extension
+                    )
+            except IOError:
+                tkMessageBox.showwarning(
+                    'Save image',
+                    'Failed to save image file.'
+                    )
+    
     def set_max(self, newmax):
         self.iterator.set_max(int(newmax))
         self.set(self.width, self.center)
@@ -131,6 +160,8 @@ class Viewer(ttk.LabelFrame):
             y0, y1 = self.y - delta_y, self.y + delta_y
             self.box = self.canvas.create_line(x0,y0,x1,y0,x1,y1,x0,y1,x0,y0,
                                                fill='white')
+        elif self.ctrl_dragging:
+            self.ctrl_motion(event)
         else:
             z = self.iterator.get_Z(event.x, event.y)
             escape = self.iterator.get_escape(event.x, event.y)
@@ -143,28 +174,43 @@ class Viewer(ttk.LabelFrame):
                 self.mouse_location.set('')
                 self.escape_time.set('')
 
+    def ctrl_motion(self, event):
+        pass
+    
     def leave(self,event):
         self.mouse_location.set('')
         self.escape_time.set('')
         if self.box:
             self.canvas.delete(self.box)
 
-    def mouse_down(self, event):
+    def click(self, event):
         self.canvas.focus_set()
         self.x, self.y = event.x, event.y
         self.dragging = 1
-        
-    def mouse_up(self, event):
-        self.dragging = 0
-        if self.box:
-            self.canvas.delete(self.box)
-        if abs(self.x - event.x) > 2:
-            delta_x = self.width*(self.x - self.W/2)/self.W
-            delta_y = self.aspect*self.width*(self.H/2 - self.y)/self.H
-            newcenter = self.center + complex(delta_x,delta_y)
-            newwidth = abs(2*self.width*float(self.x - event.x)/self.W) 
-            self.set(center=newcenter, width=newwidth)
 
+    def ctrl_click(self, event):
+        self.canvas.focus_set()
+        self.x, self.y = event.x, event.y
+        if not self.dragging:
+            self.ctrl_dragging = 1
+            
+    def unclick(self, event):
+        if self.ctrl_dragging:
+            self.end_ctrl_drag()
+        if self.dragging:
+            self.dragging = 0
+            if self.box:
+                self.canvas.delete(self.box)
+            if abs(self.x - event.x) > 2:
+                delta_x = self.width*(self.x - self.W/2)/self.W
+                delta_y = self.aspect*self.width*(self.H/2 - self.y)/self.H
+                newcenter = self.center + complex(delta_x,delta_y)
+                newwidth = abs(2*self.width*float(self.x - event.x)/self.W) 
+                self.set(center=newcenter, width=newwidth)
+
+    def end_ctrl_drag(self):
+        self.ctrl_dragging = 0
+        
     def zoom_out(self, event):
         self.set(width=2*self.width)
 
@@ -181,10 +227,7 @@ class Mandelbrot(Viewer):
                         text='Mandelbrot Set')
         self.julia = Julia(self.parent, c=center)
         self.marker = ''
-        self.canvas.bind('<Button-2>', self.show_julia)
-        if sys.platform == 'darwin':
-            self.canvas.bind('<Control-Button-1>', self.show_julia)
-            self.canvas.bind('<Control-ButtonRelease-1>', lambda event:None)
+        self.save_julia_max=256
         self.iterator = C_Iterator(self.W, self.H, 255)
         self.set(width, center)
         
@@ -198,13 +241,23 @@ class Mandelbrot(Viewer):
         self.display_image()
         self.show_center.set(cx_format.format(self.center))
         self.show_width.set('%.6g'%self.width)
-        self.show_julia()
+        self.show_julia(self.W/2, self.H/2)
 
-    def show_julia(self, event=None, center = 0+0j):
-        if event:
-            x, y = event.x, event.y
-        else:
-            x, y = self.W/2, self.H/2
+    def ctrl_click(self, event):
+        if not self.dragging:
+            self.save_julia_max = int(self.max_choice.get())
+            self.iterator.set_max(256)
+            self.ctrl_dragging = 1
+        self.show_julia(event.x, event.y)
+
+    def ctrl_motion(self, event):
+        self.show_julia(event.x, event.y)
+
+    def end_ctrl_drag(self):
+        self.ctrl_dragging = 0
+        self.julia.iterator.set_max(self.save_julia_max)
+        
+    def show_julia(self, x, y):
         delta_x = self.width*(x - self.W/2)/self.W
         delta_y = self.aspect*self.width*(self.H/2 - y)/self.H
         center = self.center + complex(delta_x,delta_y)
@@ -321,3 +374,15 @@ class Juliator:
                                      textvar=julia.escape_time)
         self.julia_when.grid(sticky=Tk_.W, padx=10, row=0, column=3)
         self.bottom.grid(row=2, column=0, sticky=Tk_.NSEW)
+        menubar = Tk_.Menu(self.window)
+        file_menu = Tk_.Menu(menubar, tearoff=0)
+        print_menu = Tk_.Menu(menubar, tearoff=0)
+        print_menu.add_command(label='Mandelbrot',
+                               command=self.mandelbrot.save_image)
+        print_menu.add_command(label='Julia',
+                               command=self.julia.save_image)
+        file_menu.add_cascade(label='Save Image', menu=print_menu)
+        file_menu.add_separator()
+        menubar.add_cascade(label='File', menu=file_menu)
+        self.window.config(menu=menubar)
+
