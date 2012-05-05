@@ -8,7 +8,10 @@ except ImportError: # Python3
     from tkinter import ttk
     import tkinter.filedialog as tkFileDialog
     import tkinter.messagebox as tkMessageBox
-from PIL import Image, ImageTk
+try:
+    from PIL import Image, ImageTk
+except ImportError:
+    import Image, ImageTk
 import os, sys, math, cmath, colorsys, time
 from iterator import C_Iterator, Z_Iterator, boundary, boxcount
 
