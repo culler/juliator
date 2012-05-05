@@ -254,7 +254,7 @@ def boxcount(image, int W, int H, int max = 255):
     is the number of boxes of size 2^i that meet the image.  The
     maximum box size is the largest power of 2 which is smaller than
     min(W,H)/4.  A box is deemed to meet the image if it contains a
-    pixel of value >= max.
+    pixel of value 0.
 
     Arguments:
         image    the image as a string
@@ -270,14 +270,12 @@ def boxcount(image, int W, int H, int max = 255):
     # Validate arguments
     if length != len(image):
         raise ValueError('Invalid image dimensions.')
-    if max < 0 or max > 255:
-        raise ValueError('The value of max must lie between 0 and 255.')
     # Allocate memory
     buf = <char *>malloc(length*sizeof(char));
     # Compute dimension
     result = []
     for i in range(length):
-        buf[i] = 1 if in_string[i] < max else 0
+        buf[i] = 1 if in_string[i] == 0 else 0
     box_size = (W if W < H else H) >> 2
     while box_size > 1:
         i, j = 0, 0
