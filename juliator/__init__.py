@@ -30,6 +30,7 @@ class Chooser(ttk.Menubutton):
     """
     def __init__(self, master, choices=[''], command=lambda x:None):
         ttk.Menubutton.__init__(self, master)
+        self.command=command
         self.variable = Tk_.StringVar(master)
         self.variable.set(choices[0])
         self.config(textvariable=self.variable)
@@ -44,7 +45,10 @@ class Chooser(ttk.Menubutton):
 
     def get(self):
         return self.variable.get()
-    
+
+    def set(self, value):
+        self.variable.set(str(value))
+        
 def vibgyor(size=256):
     result = [0,0,0]
     M = float(size - 1)*1.125
@@ -197,7 +201,7 @@ class Viewer(ttk.LabelFrame):
             
     def unclick(self, event):
         if self.ctrl_dragging:
-            self.end_ctrl_drag()
+            self.end_ctrl_drag(event)
         if self.dragging:
             self.dragging = 0
             if self.box:
@@ -209,7 +213,7 @@ class Viewer(ttk.LabelFrame):
                 newwidth = abs(2*self.width*float(self.x - event.x)/self.W) 
                 self.set(center=newcenter, width=newwidth)
 
-    def end_ctrl_drag(self):
+    def end_ctrl_drag(self, event):
         self.ctrl_dragging = 0
         
     def zoom_out(self, event):
@@ -227,8 +231,8 @@ class Mandelbrot(Viewer):
         Viewer.__init__(self, parent, W, H, width, center, palette,
                         text='Mandelbrot Set')
         self.julia = Julia(self.parent, c=center)
+        self.save_max = 256
         self.marker = ''
-        self.save_julia_max=256
         self.iterator = C_Iterator(self.W, self.H, 255)
         self.set(width, center)
         
@@ -246,17 +250,20 @@ class Mandelbrot(Viewer):
 
     def ctrl_click(self, event):
         if not self.dragging:
-            self.save_julia_max = int(self.max_choice.get())
-            self.iterator.set_max(256)
+            self.save_max = int(self.julia.max_choice.get())
+            self.julia.max_choice.set(256)
+            self.julia.iterator.set_max(256)
             self.ctrl_dragging = 1
         self.show_julia(event.x, event.y)
 
     def ctrl_motion(self, event):
         self.show_julia(event.x, event.y)
 
-    def end_ctrl_drag(self):
+    def end_ctrl_drag(self, event):
         self.ctrl_dragging = 0
-        self.julia.iterator.set_max(self.save_julia_max)
+        self.julia.max_choice.set(self.save_max)
+        self.julia.iterator.set_max(self.save_max)
+        self.show_julia(event.x, event.y)
         
     def show_julia(self, x, y):
         delta_x = self.width*(x - self.W/2)/self.W
