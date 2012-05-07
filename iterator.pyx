@@ -57,10 +57,10 @@ cdef class Iterator:
         self.log_scale = NULL
         self.max = 0
         self.strsize = strsize = W*H
-        # Get shared memory, so it will be visible to subprocesses.
+        # Use shared memory, so subprocesses can change it.
         self.image_string = <unsigned char *>sh_malloc(strsize*sizeof(char))
         self.counts = <unsigned short *>sh_malloc(strsize*sizeof(short))
-        # These are private, so malloc is fine.
+        # These are not changed by subprocesses, so malloc is fine.
         self.real_axis = <double *>malloc(W*sizeof(double));
         self.imag_axis = <double *>malloc(H*sizeof(double));
         
