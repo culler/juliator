@@ -1,3 +1,4 @@
+# Malloc
 ctypedef unsigned long size_t
 ctypedef long off_t
 
@@ -5,24 +6,43 @@ cdef extern from "stdlib.h":
     void* malloc(size_t size)
     void free(void* mem)
 
-cdef extern from "sys/mman.h":
-    void* mmap(void *addr, size_t len, int prot, int flags, int fd,
-               off_t offset)
-    int munmap(void *addr, size_t len)
-    cdef enum:
-        PROT_NONE
-        PROT_READ
-        PROT_WRITE
-        PROT_EXEC
-        MAP_ANON
-        MAP_FILE
-        MAP_SHARED
-        MAP_PRIVATE
-        MAP_FIXED
+# Shared memory allocation
+IF UNAME_SYSNAME == 'Windows':
+    cdef void* sh_malloc(size_t size):
+        cdef HANDLE fm
+        fm = CreateFileMapping(INVALID_HANDLE_VALUE,NULL,PAGE_READWRITE,0,size,NULL)
+        return MapViewOfFile(fm, FILE_MAP_ALL_ACCESS,0, 0, size)
+        return NULL
+
+    cdef void sh_free(void* ptr, size_t size):
+        UnmapViewOfFile(ptr)
+        CloseHandle(fm)
+
+ELSE:
+    cdef extern from "sys/mman.h":
+        void* mmap(void *addr, size_t len, int prot, int flags, int fd,
+                   off_t offset)
+        int munmap(void *addr, size_t len)
+        cdef enum:
+            PROT_NONE
+            PROT_READ
+            PROT_WRITE
+            PROT_EXEC
+            MAP_ANON
+            MAP_FILE
+            MAP_SHARED
+            MAP_PRIVATE
+            MAP_FIXED
+
+    cdef void* sh_malloc(size_t size):
+        return mmap(NULL, size, PROT_READ|PROT_WRITE, MAP_ANON|MAP_SHARED, -1, 0)
+
+    cdef int sh_free(void* ptr, size_t size):
+        return munmap(ptr, size)
 
 from multiprocessing import Process, cpu_count
 from math import log
-
+        
 cdef class Iterator:
     cdef int W, H, max, strsize, cpus
     cdef double *real_axis, *imag_axis
@@ -38,24 +58,16 @@ cdef class Iterator:
         self.max = 0
         self.strsize = strsize = W*H
         # Get shared memory, so it will be visible to subprocesses.
-        self.image_string = <unsigned char *>mmap(NULL,
-                                             strsize*sizeof(char),
-                                             PROT_READ|PROT_WRITE,
-                                             MAP_ANON|MAP_SHARED,
-                                             -1, 0)
-        self.counts = <unsigned short *>mmap(NULL,
-                                             strsize*sizeof(short),
-                                             PROT_READ|PROT_WRITE,
-                                             MAP_ANON|MAP_SHARED,
-                                             -1, 0)
-        # These are private -- malloc is fine.
+        self.image_string = <unsigned char *>sh_malloc(strsize*sizeof(char))
+        self.counts = <unsigned short *>sh_malloc(strsize*sizeof(short))
+        # These are private, so malloc is fine.
         self.real_axis = <double *>malloc(W*sizeof(double));
         self.imag_axis = <double *>malloc(H*sizeof(double));
         
     def __dealloc__(self):
         free(self.log_scale)
-        munmap(self.image_string, self.strsize*sizeof(char))
-        munmap(self.counts, self.strsize*sizeof(short))
+        sh_free(self.image_string, self.strsize*sizeof(char))
+        sh_free(self.counts, self.strsize*sizeof(short))
         free(self.real_axis)
         free(self.imag_axis)
 
