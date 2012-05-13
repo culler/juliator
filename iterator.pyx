@@ -40,15 +40,26 @@ ELSE:
     cdef int sh_free(void* ptr, size_t size):
         return munmap(ptr, size)
 
+    cdef class SharedMemory:
+        cdef size_t size
+        cdef void* pointer
+        def __cinit__(self, size_t size):
+            self.size = size
+            self.pointer = sh_malloc(size)
+            
+        def __dealloc__(self):
+            sh_free(self.pointer, self.size)
+
 from multiprocessing import Process, cpu_count
 from math import log
-        
+
 cdef class Iterator:
     cdef int W, H, max, strsize, cpus
     cdef double *real_axis, *imag_axis
     cdef unsigned char *log_scale, *image_string
     cdef unsigned short *counts
-    cdef BL, TR, param, queue
+    cdef BL, TR, param
+    cdef SharedMemory image_memory, counts_memory
     
     def __cinit__(self, int W=500, int H=500, int max=255,
                   BL=-1-1j, TR=1+1j, param=0+0j):
@@ -58,16 +69,16 @@ cdef class Iterator:
         self.max = 0
         self.strsize = strsize = W*H
         # Use shared memory, so subprocesses can change it.
-        self.image_string = <unsigned char *>sh_malloc(strsize*sizeof(char))
-        self.counts = <unsigned short *>sh_malloc(strsize*sizeof(short))
+        self.image_memory = SharedMemory(strsize*sizeof(char))
+        self.image_string = <unsigned char *>self.image_memory.pointer
+        self.counts_memory = SharedMemory(strsize*sizeof(short))
+        self.counts = <unsigned short *>self.counts_memory.pointer
         # These are not changed by subprocesses, so malloc is fine.
         self.real_axis = <double *>malloc(W*sizeof(double));
         self.imag_axis = <double *>malloc(H*sizeof(double));
         
     def __dealloc__(self):
         free(self.log_scale)
-        sh_free(self.image_string, self.strsize*sizeof(char))
-        sh_free(self.counts, self.strsize*sizeof(short))
         free(self.real_axis)
         free(self.imag_axis)
 
