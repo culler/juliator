@@ -172,7 +172,7 @@ cdef class Z_Iterator(Iterator):
     def iterate(self, int band=0, int num_bands=1):
         cdef int S, N, H0, H1, W, d, i, j, k, iterations, maxit=self.max+1
         cdef unsigned char* log_scale = self.log_scale
-        cdef double R, I, RR, II
+        cdef double R, I, RR, II, RI
         cdef double Cr=self.param.real, Ci=self.param.imag
         cdef double *Zr = self.real_axis, *Zi=self.imag_axis
         cdef unsigned char* imgstr = self.image_string
@@ -183,6 +183,7 @@ cdef class Z_Iterator(Iterator):
         H1 = self.H if band == num_bands-1 else H0 + d
         W = self.W
         S = N = H0*W
+        # For speed -- no python calls in this loop!
         for j in range(H0, H1):
             for i in range(W):
                 iterations = 0
@@ -192,7 +193,8 @@ cdef class Z_Iterator(Iterator):
                     if RR + II > 4.0:
                         iterations = k+1
                         break
-                    I = 2*I*R + Ci
+                    RI = R*I
+                    I = RI + RI + Ci
                     R = RR - II + Cr
                 counts[N] = iterations
                 imgstr[N] = log_scale[iterations]
@@ -207,7 +209,7 @@ cdef class C_Iterator(Iterator):
     def iterate(self, int band=0, int num_bands=1):
         cdef int S, N, H0, H1, W, d, i, j, k, iterations, maxit=self.max+1
         cdef unsigned char *log_scale = self.log_scale
-        cdef double R, I, RR, II
+        cdef double R, I, RR, II, RI
         cdef double R0=self.param.real, I0=self.param.imag
         cdef double *Cr=self.real_axis, *Ci=self.imag_axis
         cdef unsigned char* imgstr = self.image_string
@@ -228,7 +230,8 @@ cdef class C_Iterator(Iterator):
                     if RR + II > 4.0:
                         iterations = k
                         break
-                    I = 2*I*R + Ci[j]
+                    RI = R*I
+                    I = RI + RI + Ci[j]
                     R = RR - II + Cr[i]
                 counts[N] = iterations
                 imgstr[N] = self.log_scale[iterations]
