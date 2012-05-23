@@ -122,9 +122,9 @@ class Viewer(ttk.LabelFrame):
 
     # Subclasses must provide an iterator attribute.
     def display_image(self):
-        start = time.time()
+        #start = time.time()
         self.imagestring = self.iterator.get_image()
-        print(time.time() - start)
+        #print(time.time() - start)
         self.image = Image.fromstring('P', (self.W, self.H),
                                       self.imagestring)
         self.image.putpalette(self.palette)
