@@ -1,0 +1,8 @@
+syntax: glob
+*.pyc
+iterator.c
+build
+dist
+disk_images
+*.egg-info
+*.DS_Store
