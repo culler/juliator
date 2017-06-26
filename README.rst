@@ -21,19 +21,22 @@ For macOS there is a disk image available in the Downloads
 section which contains a standalone app suitable for copying
 to the applications folder.
 
-Other platforms should install with
+Other platforms should install with:
 
 ::
+   
   python3 setup.py install
 
-or
+or, on Linux:
 
 ::
+   
   sudo python3 setup.py install
 
 and then run the app with
 
 ::
+
   python3 -m juliator.app
 
   
