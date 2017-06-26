@@ -125,7 +125,7 @@ class Viewer(ttk.LabelFrame):
         #start = time.time()
         self.imagestring = self.iterator.get_image()
         #print(time.time() - start)
-        self.image = Image.fromstring('P', (self.W, self.H),
+        self.image = Image.frombytes('P', (self.W, self.H),
                                       self.imagestring)
         self.image.putpalette(self.palette)
         self.bitmap = ImageTk.PhotoImage(self.image)
@@ -311,10 +311,10 @@ class Julia(Viewer):
         if self.filled:
             self.filled = False
             bdry = boundary(self.imagestring, self.W, self.H)
-            self.image = Image.fromstring('L', (self.W, self.H), bdry)
+            self.image = Image.frombytes('L', (self.W, self.H), bdry)
         else:
             self.filled = True
-            self.image = Image.fromstring(
+            self.image = Image.frombytes(
                 'P', (self.W, self.H), self.imagestring)
             self.image.putpalette(self.palette)
 

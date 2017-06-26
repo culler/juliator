@@ -55,8 +55,10 @@ from math import log
 
 cdef class Iterator:
     cdef int W, H, max, strsize, cpus
-    cdef double *real_axis, *imag_axis
-    cdef unsigned char *log_scale, *image_string
+    cdef double* real_axis
+    cdef double* imag_axis
+    cdef unsigned char* log_scale
+    cdef unsigned char* image_string
     cdef unsigned short *counts
     cdef BL, TR, param
     cdef SharedMemory image_memory, counts_memory
@@ -174,7 +176,8 @@ cdef class Z_Iterator(Iterator):
         cdef unsigned char* log_scale = self.log_scale
         cdef double R, I, RR, II, RI
         cdef double Cr=self.param.real, Ci=self.param.imag
-        cdef double *Zr = self.real_axis, *Zi=self.imag_axis
+        cdef double* Zr = self.real_axis
+        cdef double* Zi = self.imag_axis
         cdef unsigned char* imgstr = self.image_string
         cdef unsigned short* counts = self.counts
 
@@ -210,8 +213,9 @@ cdef class C_Iterator(Iterator):
         cdef int S, N, H0, H1, W, d, i, j, k, iterations, maxit=self.max+1
         cdef unsigned char *log_scale = self.log_scale
         cdef double R, I, RR, II, RI
-        cdef double R0=self.param.real, I0=self.param.imag
-        cdef double *Cr=self.real_axis, *Ci=self.imag_axis
+        cdef double R0 = self.param.real, I0 = self.param.imag
+        cdef double* Cr = self.real_axis
+        cdef double* Ci = self.imag_axis
         cdef unsigned char* imgstr = self.image_string
         cdef unsigned short* counts = self.counts
 
